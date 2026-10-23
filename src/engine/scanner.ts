@@ -7,7 +7,7 @@ import { scanHardcodedSecretsAndProviders } from '../parser/hardcoded-secrets.js
 import { RuleRegistry } from '../rules/registry.js';
 import { QuantumScoringEngine } from './qvi.js';
 import { CnsaEvaluator } from './cnsa.js';
-import { CryptoFinding, ScanOptions, ScanResult, Severity } from '../types/index.js';
+import { CryptoFinding, ScanOptions, ScanResult, Severity, Language } from '../types/index.js';
 
 const SEVERITY_LEVELS: Record<Severity, number> = {
   info: 0,
@@ -119,6 +119,59 @@ export class PQCScanner {
     const summary = QuantumScoringEngine.generateSummary(
       targetDir,
       filesScanned,
+      allFindings,
+      durationMs
+    );
+
+    return {
+      summary,
+      findings: allFindings,
+    };
+  }
+
+  public async scanSource(
+    content: string,
+    language: Language,
+    options: Partial<ScanOptions> = {}
+  ): Promise<ScanResult> {
+    const startTime = Date.now();
+    const treeEngine = await TreeSitterEngine.getInstance();
+    let allFindings: CryptoFinding[] = [];
+
+    // 1. Scan hardcoded secrets and providers
+    const secretFindings = scanHardcodedSecretsAndProviders(content, `pasted-snippet.${language === 'python' ? 'py' : language === 'javascript' ? 'js' : language === 'typescript' ? 'ts' : language === 'go' ? 'go' : 'java'}`);
+    for (const sf of secretFindings) {
+      sf.language = language;
+    }
+    allFindings.push(...secretFindings);
+
+    // 2. Parse with Tree-sitter
+    try {
+      const parser = await treeEngine.createParser(language);
+      const tree = parser.parse(content);
+      const rules = this.registry.getRulesForLanguage(language);
+
+      const ctx = ASTCallGraphAnalyzer.extractContext(
+        tree.rootNode,
+        `snippet.${language}`,
+        content,
+        language
+      );
+
+      const astFindings = ASTCallGraphAnalyzer.analyzeNode(tree.rootNode, ctx, rules);
+      allFindings.push(...astFindings);
+    } catch {
+      // Continue on parse error
+    }
+
+    if (options.cnsaMode) {
+      allFindings = CnsaEvaluator.applyCnsaMode(allFindings);
+    }
+
+    const durationMs = Date.now() - startTime;
+    const summary = QuantumScoringEngine.generateSummary(
+      'in-memory-snippet',
+      1,
       allFindings,
       durationMs
     );
