@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
-    "pqc-scan": "./dist/bin/pqc-scan.js"
+    "pqc-scan": "./dist/bin/pqc-scan.js",
+    "quantascan": "./dist/bin/pqc-scan.js"
   },
   "scripts": {
     "build": "tsc",
