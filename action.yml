@@ -1,0 +1,75 @@
+name: 'QuantaScan PQC Scanner & CBOM Generator'
+description: 'High-performance Post-Quantum Cryptography (PQC) static analysis CLI and automated CycloneDX v1.6 CBOM engine'
+author: 'QuantaScan Core Team'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  target-dir:
+    description: 'Target directory containing code to scan'
+    required: false
+    default: '.'
+  format:
+    description: 'Output format: cli-table, json, cyclonedx-cbom, or html'
+    required: false
+    default: 'cli-table'
+  min-severity:
+    description: 'Minimum severity threshold: low, medium, high, or critical'
+    required: false
+    default: 'low'
+  cnsa-mode:
+    description: 'Strict enforcement of CNSA 2.0 timelines and algorithm deprecations'
+    required: false
+    default: 'false'
+  output:
+    description: 'File path to save assessment or CBOM output'
+    required: false
+    default: ''
+  fail-on:
+    description: 'Fail CI/CD build if findings meet or exceed severity: low, medium, high, critical'
+    required: false
+    default: 'critical'
+
+outputs:
+  qvi:
+    description: 'Quantum Vulnerability Index score (0 to 100)'
+    value: ${{ steps.scan.outputs.qvi }}
+  readiness:
+    description: 'Post-Quantum Readiness score (0% to 100%)'
+    value: ${{ steps.scan.outputs.readiness }}
+  total-assets:
+    description: 'Total cryptographic assets discovered'
+    value: ${{ steps.scan.outputs.total_assets }}
+  cnsa-compliant:
+    description: 'Whether codebase satisfies CNSA 2.0 standards'
+    value: ${{ steps.scan.outputs.cnsa_compliant }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Run QuantaScan PQC Analysis
+      id: scan
+      shell: bash
+      run: |
+        ARGS="${{ inputs.target-dir }} --format=${{ inputs.format }} --min-severity=${{ inputs.min-severity }}"
+        
+        if [ "${{ inputs.cnsa-mode }}" = "true" ]; then
+          ARGS="$ARGS --cnsa-mode"
+        fi
+        
+        if [ -n "${{ inputs.output }}" ]; then
+          ARGS="$ARGS --output=${{ inputs.output }}"
+        fi
+        
+        if [ -n "${{ inputs.fail-on }}" ]; then
+          ARGS="$ARGS --fail-on=${{ inputs.fail-on }}"
+        fi
+        
+        echo "Executing: npx quantascan $ARGS"
+        npx quantascan $ARGS
